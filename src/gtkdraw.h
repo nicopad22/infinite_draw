@@ -3,10 +3,10 @@
 
 //states for each node for when mouse is pressed; used when drawing the lines onto the screen.
 typedef enum node_state {
-    start,
-    end,
-    path,
-    start_and_end
+    start = 10,
+    end = 20,
+    path = 30,
+    start_and_end = 40
 } node_state_t;
 
 //basic struct to describe accurate position, not related to pixels.
@@ -40,10 +40,10 @@ vector2_node_t *head;
 vector2_node_t *last;
 
 //prototypes
+
 static void clear_surface(void);
 static gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, gpointer data);
 static gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data);
-static void draw_brush(GtkWidget *widget, gdouble x, gdouble y);
 static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data);
 static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data);
 static void close_window(void);

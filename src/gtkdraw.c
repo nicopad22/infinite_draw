@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <gtk/gtk.h>
-#include <gtkdraw.h>
+#include "gtkdraw.h"
 
-/* Surface to store current scribbles */
+//surface for drawing.
 static cairo_surface_t *surface = NULL;
 
 int main(int argc, char **argv) {
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     g_object_unref(app);
     return status;
 }
-
+/* clear the screen. */
 static void clear_surface(void)
 {
     cairo_t *cr;
@@ -28,7 +28,7 @@ static void clear_surface(void)
     cairo_destroy(cr);
 }
 
-/* Create a new surface of the appropriate size to store our scribbles */
+/* create new surface to store drawings, with appropriate size. */
 static gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, gpointer data) {
     if (surface)
         cairo_surface_destroy(surface);
@@ -45,10 +45,7 @@ static gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, 
     return TRUE;
 }
 
-/* Redraw the screen from the surface. Note that the ::draw
- * signal receives a ready-to-be-used cairo_t that is already
- * clipped to only draw the exposed areas of the widget
- */
+/* draw surface to the screen */
 static gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data) {
     cairo_set_source_surface(cr, surface, 0, 0);
     cairo_paint(cr);
@@ -56,127 +53,127 @@ static gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data) {
     return FALSE;
 }
 
-/* Draw a rectangle on the surface at the given position */
-static void draw_brush(GtkWidget *widget, gdouble x, gdouble y) {
-    cairo_t *cr;
-
-    /* Paint to the surface, where we store our state */
-    cr = cairo_create(surface);
-
-    
-    cairo_fill(cr);
-
-    cairo_destroy(cr);
-}
-
-/* Handle button press events by either drawing a rectangle
- * or clearing the surface, depending on which button was pressed.
- * The ::button-press signal handler receives a GdkEventButton
- * struct which contains this information.
- */
+/* called when mouse is clicked; does not get called each frame, but rather once when you press the mouse. */
 static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data) {
-    /* paranoia check, in case we haven't gotten a configure event */
+    //in case something went horribly wrong
     if (surface == NULL)
         return FALSE;
 
     if (event->button == GDK_BUTTON_PRIMARY) {
         vector2_node_t *StartNode = malloc(sizeof(vector2_node_t));
-        StartNode->state = start;
+        //set positions and initialize .next
         StartNode->vector.x = event->x;
         StartNode->vector.y = event->y;
         StartNode->next = NULL;
 
+        //if this is the first click: point both head & last to the new node.
+        //plus, set the state to start & end, as we dont have an end node yet.
         if (head == NULL) {
             head = StartNode;
             last = StartNode;
             StartNode->state = start_and_end;
+        //else: the list is not empty, so we append to the end, and point currently last node to new node.
         } else {
             last->next = StartNode;
             last = StartNode;
+            StartNode->state = start_and_end;
         }
         
     }
 
-    /* We've handled the event, stop processing */
+    //everything has gone well. (hopefully)
     return TRUE;
 }
 
-/* Handle motion events by continuing to draw if button 1 is
- * still held down. The ::motion-notify signal handler receives
- * a GdkEventMotion struct which contains this information.
- */
+/* gets called when we already clicked the mouse, but we moved to a different position. */
 static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
-    /* paranoia check, in case we haven't gotten a configure event */
+    //in case something goes wrong
     if (surface == NULL)
         return FALSE;
 
     if (event->state & GDK_BUTTON1_MASK) {
         vector2_node_t *NewNode = malloc(sizeof(vector2_node_t));
+
         NewNode->vector.x = event->x;
         NewNode->vector.y = event->y;
         NewNode->next = NULL;
 
+        //whatever happens, we definetly want the last node to point at us.
         last->next = NewNode;
 
+        //if the state of the last node is start_and_end, then change its state to start.
+        //(in other words if this stroke only has the initial click)
         if (last->state == start_and_end)
             last->state = start;
-        else if (last->state = end)
+        //We already have more than one node in this stroke, so we can continue it by updating states for last node
+        //and append a new node at the end.
+        else if (last->state == end) {
             last->state = path;
-        else fprintf(stderr, "ERROR: linked list not set up correctly");
+            NewNode->state = end;
+        } else  {
+            //something has gone horribly wrong when setting the states up, quickly exit and report the user
+            fprintf(stderr, "ERROR: linked list not set up correctly, node had invalid state: %d\n", last->state);
+            return FALSE;
+        }
 
         last = NewNode;
         NewNode->state = end;
     }
 
-    /* We've handled it, stop processing */
+    //everything went well
     return TRUE;
 }
 
+/* make sure to destroy cairo surface when we close the window */
 static void close_window(void) {
     if (surface)
         cairo_surface_destroy(surface);
 }
 
+/* activate window stuff. Very similar to java constructor when using the java window stuff. */
 static void activate(GtkApplication *app, gpointer user_data) {
+    //simple elements: a window, a frame, and the drawing area for the strokes.
     GtkWidget *window;
     GtkWidget *frame;
     GtkWidget *drawing_area;
 
+    //create new window, and set its title.
     window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "Drawing Area");
 
+    //connect signal for when we close the window, the cairo surface gets destroyed as well.
     g_signal_connect(window, "destroy", G_CALLBACK(close_window), NULL);
 
+    //set border width for the window. (to leave some space between draw area and window)
     gtk_container_set_border_width(GTK_CONTAINER(window), 8);
 
+    //create new frame, no label. (NULL)
     frame = gtk_frame_new(NULL);
+    //set the shadow for the frame
     gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
+    //add frame to window.
     gtk_container_add(GTK_CONTAINER(window), frame);
 
+    //create new draw area
     drawing_area = gtk_drawing_area_new();
-    /* set a minimum size */
+    //set minimum size
     gtk_widget_set_size_request(drawing_area, 100, 100);
-
+    //add draw area to the frame
     gtk_container_add(GTK_CONTAINER(frame), drawing_area);
 
-    /* Signals used to handle the backing surface */
-    g_signal_connect(drawing_area, "draw",
-                     G_CALLBACK(draw_cb), NULL);
-    g_signal_connect(drawing_area, "configure-event",
-                     G_CALLBACK(configure_event_cb), NULL);
+    //Connect signal to draw the surface to the screen
+    g_signal_connect(drawing_area, "draw", G_CALLBACK(draw_cb), NULL);
+    //Connect signal to create a new surface with the appropriate size
+    g_signal_connect(drawing_area, "configure-event", G_CALLBACK(configure_event_cb), NULL);
 
-    /* Event signals */
-    g_signal_connect(drawing_area, "motion-notify-event",
-                     G_CALLBACK(dw_moved), NULL);
-    g_signal_connect(drawing_area, "button-press-event",
-                     G_CALLBACK(dw_clicked), NULL);
+    //connect signals for mouse events
+    g_signal_connect(drawing_area, "motion-notify-event", G_CALLBACK(dw_moved), NULL);
+    g_signal_connect(drawing_area, "button-press-event", G_CALLBACK(dw_clicked), NULL);
 
-    /* Ask to receive events the drawing area doesn't normally
-   * subscribe to. In particular, we need to ask for the
-   * button press and motion notify events that want to handle.
-   */
+    //set events
     gtk_widget_set_events(drawing_area, gtk_widget_get_events(drawing_area) | GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
 
+    //show widgets; otherwise nothing will happen
     gtk_widget_show_all(window);
 }
 
