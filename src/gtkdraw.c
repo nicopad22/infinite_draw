@@ -5,6 +5,7 @@
 //surface for drawing.
 static cairo_surface_t *surface = NULL;
 
+
 int main(int argc, char **argv) {
     GtkApplication *app;
     int status;
@@ -15,9 +16,9 @@ int main(int argc, char **argv) {
     g_object_unref(app);
     return status;
 }
+
 /* clear the screen. */
-static void clear_surface(void)
-{
+static void clear_screen(void) {
     cairo_t *cr;
 
     cr = cairo_create(surface);
@@ -39,16 +40,50 @@ static gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, 
                                                 gtk_widget_get_allocated_height(widget));
 
     /* Initialize the surface to white */
-    clear_surface();
+    clear_screen();
 
     /* We've handled the configure event, no need for further processing. */
     return TRUE;
 }
 
+/* paint stored lines into the surface */
+static void paint_window(cairo_t *cr) {
+    vector2_node_t *cursor = head;
+    int counter = 0;
+
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_paint(cr);
+    cairo_set_line_width(cr, 2);
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    while (cursor) {
+        switch(cursor->state) {
+            case start_and_end:
+                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
+                break;
+            case start:
+                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
+                break;
+            case path:
+                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
+                break;
+            case end:
+                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
+                break;
+        }
+        cursor = cursor->next;
+        counter++;
+    }
+    cairo_stroke(cr);
+}
+
 /* draw surface to the screen */
 static gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data) {
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_paint(cr);
+
+    //Paint scribbles
+    paint_window(cr);
 
     return FALSE;
 }
@@ -77,9 +112,10 @@ static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer da
             last->next = StartNode;
             last = StartNode;
             StartNode->state = start_and_end;
-        }
-        
+        }   
     }
+        
+    gtk_widget_queue_draw(widget);
 
     //everything has gone well. (hopefully)
     return TRUE;
@@ -119,6 +155,8 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
         last = NewNode;
         NewNode->state = end;
     }
+
+    gtk_widget_queue_draw(widget);
 
     //everything went well
     return TRUE;
