@@ -4,7 +4,9 @@
 
 //surface for drawing.
 static cairo_surface_t *surface = NULL;
-
+static gboolean is_dragging = FALSE;
+static vector2_t last_pos;
+static vector2_t offset;
 
 int main(int argc, char **argv) {
     GtkApplication *app;
@@ -55,21 +57,22 @@ static void paint_window(cairo_t *cr) {
     cairo_paint(cr);
     cairo_set_line_width(cr, 2);
     cairo_set_source_rgb(cr, 0, 0, 0);
+
     while (cursor) {
         switch(cursor->state) {
             case start_and_end:
-                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
-                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
                 break;
             case start:
-                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
                 break;
             case path:
-                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
-                cairo_move_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
                 break;
             case end:
-                cairo_line_to(cr, cursor->vector.x, cursor->vector.y);
+                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
                 break;
         }
         cursor = cursor->next;
@@ -97,8 +100,8 @@ static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer da
     if (event->button == GDK_BUTTON_PRIMARY) {
         vector2_node_t *StartNode = malloc(sizeof(vector2_node_t));
         //set positions and initialize .next
-        StartNode->vector.x = event->x;
-        StartNode->vector.y = event->y;
+        StartNode->vector.x = event->x - offset.x;
+        StartNode->vector.y = event->y - offset.y;
         StartNode->next = NULL;
 
         //if this is the first click: point both head & last to the new node.
@@ -117,6 +120,9 @@ static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer da
         
     gtk_widget_queue_draw(widget);
 
+    last_pos.x = event->x;
+    last_pos.y = event->y;
+
     //everything has gone well. (hopefully)
     return TRUE;
 }
@@ -130,8 +136,8 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
     if (event->state & GDK_BUTTON1_MASK) {
         vector2_node_t *NewNode = malloc(sizeof(vector2_node_t));
 
-        NewNode->vector.x = event->x;
-        NewNode->vector.y = event->y;
+        NewNode->vector.x = event->x - offset.x;
+        NewNode->vector.y = event->y - offset.y;
         NewNode->next = NULL;
 
         //whatever happens, we definetly want the last node to point at us.
@@ -158,7 +164,34 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
 
     gtk_widget_queue_draw(widget);
 
+    vector2_t movement;
+    movement.x = event->x - last_pos.x;
+    movement.y = event->y - last_pos.y;
+
+    if (is_dragging) {
+        offset.x += movement.x;
+        offset.y += movement.y;
+
+        last_pos.x = event->x;
+        last_pos.y = event->y;
+    }
+
     //everything went well
+    return TRUE;
+}
+
+/* on keypresses, will trigger whenever we press or release a key */
+static gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data) {
+
+    if (surface == NULL)
+        return FALSE;
+
+    //we want to be dragging while we hold space; and as this triggers when we press and release,
+    //this boolean will be true when we are holding it.
+    // if (event->keyval == GDK_KEY_space) {
+    //     is_dragging = !is_dragging;
+    // }
+
     return TRUE;
 }
 
@@ -166,6 +199,19 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
 static void close_window(void) {
     if (surface)
         cairo_surface_destroy(surface);
+    unload();
+}
+
+/* free nodes */
+static void unload(void) {
+    vector2_node_t *cursor = head;
+    while (cursor) {
+        vector2_node_t *temp = cursor;
+        cursor = cursor->next;
+        free(temp);
+    }
+    head = last = NULL;
+
 }
 
 /* activate window stuff. Very similar to java constructor when using the java window stuff. */
@@ -191,9 +237,11 @@ static void activate(GtkApplication *app, gpointer user_data) {
     gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
     //add frame to window.
     gtk_container_add(GTK_CONTAINER(window), frame);
-
+    
     //create new draw area
     drawing_area = gtk_drawing_area_new();
+    //set it so we can focus it
+    gtk_widget_set_can_focus(drawing_area, TRUE);
     //set minimum size
     gtk_widget_set_size_request(drawing_area, 100, 100);
     //add draw area to the frame
@@ -207,6 +255,7 @@ static void activate(GtkApplication *app, gpointer user_data) {
     //connect signals for mouse events
     g_signal_connect(drawing_area, "motion-notify-event", G_CALLBACK(dw_moved), NULL);
     g_signal_connect(drawing_area, "button-press-event", G_CALLBACK(dw_clicked), NULL);
+    g_signal_connect(drawing_area, "key-press-event", G_CALLBACK(dw_keyPressed), NULL);
 
     //set events
     gtk_widget_set_events(drawing_area, gtk_widget_get_events(drawing_area) | GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
@@ -214,4 +263,3 @@ static void activate(GtkApplication *app, gpointer user_data) {
     //show widgets; otherwise nothing will happen
     gtk_widget_show_all(window);
 }
-

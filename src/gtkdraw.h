@@ -44,8 +44,12 @@ vector2_node_t *last;
 static void clear_screen(void);
 static gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, gpointer data);
 static gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data);
+
 static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data);
 static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data);
+static gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data);
+
 static void paint_window(cairo_t *cr);
 static void close_window(void);
+static void unload(void);
 static void activate(GtkApplication *app, gpointer user_data);
