@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <gtk/gtk.h>
+#include <math.h>
 #include "gtkdraw.h"
 
 //surface for drawing.
@@ -7,6 +8,9 @@ static cairo_surface_t *surface = NULL;
 static gboolean is_dragging = FALSE;
 static vector2_t last_pos;
 static vector2_t offset;
+static double zoom = 1;
+#define zoom_increase 0.09
+
 
 int main(int argc, char **argv) {
     GtkApplication *app;
@@ -59,20 +63,21 @@ static void paint_window(cairo_t *cr) {
     cairo_set_source_rgb(cr, 0, 0, 0);
 
     while (cursor) {
+        pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
         switch(cursor->state) {
             case start_and_end:
-                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
-                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
                 break;
             case start:
-                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
                 break;
             case path:
-                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
-                cairo_move_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
                 break;
             case end:
-                cairo_line_to(cr, cursor->vector.x + offset.x, cursor->vector.y + offset.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
                 break;
         }
         cursor = cursor->next;
@@ -100,8 +105,7 @@ static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer da
     if (event->button == GDK_BUTTON_PRIMARY) {
         vector2_node_t *StartNode = malloc(sizeof(vector2_node_t));
         //set positions and initialize .next
-        StartNode->vector.x = event->x - offset.x;
-        StartNode->vector.y = event->y - offset.y;
+        StartNode->vector = pixel_to_vpos((pixel_vector_t){event->x, event->y});
         StartNode->next = NULL;
 
         //if this is the first click: point both head & last to the new node.
@@ -127,6 +131,20 @@ static gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer da
     return TRUE;
 }
 
+/* activates when the mouse wheel gets scrolled up. */
+static gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) {
+    double to_increase = ((event->direction == GDK_SCROLL_UP) * -zoom_increase * zoom) +
+                         ((event->direction == GDK_SCROLL_DOWN) * zoom_increase * zoom);
+    zoom += to_increase;
+    //offset.x += to_increase * (1 / (event->x / 4));
+    //offset.y += to_increase * (1 / (event->y / 4));
+    
+    g_print("changed zoom to %f\n", zoom);
+    gtk_widget_queue_draw(widget);
+
+    return TRUE;
+}
+
 /* gets called when we already clicked the mouse, but we moved to a different position. */
 static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
     //in case something goes wrong
@@ -136,8 +154,7 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
     if (event->state & GDK_BUTTON1_MASK) {
         vector2_node_t *NewNode = malloc(sizeof(vector2_node_t));
 
-        NewNode->vector.x = event->x - offset.x;
-        NewNode->vector.y = event->y - offset.y;
+        NewNode->vector = pixel_to_vpos((pixel_vector_t){event->x, event->y});
         NewNode->next = NULL;
 
         //whatever happens, we definetly want the last node to point at us.
@@ -164,16 +181,17 @@ static gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data
 
     gtk_widget_queue_draw(widget);
 
-    vector2_t movement;
+    vector2_t movement = {0, 0};
     movement.x = event->x - last_pos.x;
     movement.y = event->y - last_pos.y;
+    last_pos.x = event->x;
+    last_pos.y = event->y;
+
+    //movement = pixel_to_vpos((pixel_vector_t){movement.x, movement.y});
 
     if (is_dragging) {
         offset.x += movement.x;
         offset.y += movement.y;
-
-        last_pos.x = event->x;
-        last_pos.y = event->y;
     }
 
     //everything went well
@@ -188,9 +206,9 @@ static gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer da
 
     //we want to be dragging while we hold space; and as this triggers when we press and release,
     //this boolean will be true when we are holding it.
-    // if (event->keyval == GDK_KEY_space) {
-    //     is_dragging = !is_dragging;
-    // }
+    if (event->keyval == GDK_KEY_space) {
+        is_dragging = !is_dragging;
+    }
 
     return TRUE;
 }
@@ -202,7 +220,17 @@ static void close_window(void) {
     unload();
 }
 
-/* free nodes */
+/* convert a current pixel location to a virtual position. */
+static vector2_t pixel_to_vpos(pixel_vector_t pixel) {
+    return (vector2_t){(pixel.x - offset.x) * zoom, (pixel.y - offset.y) * zoom};
+}
+
+/* convert a virtual location to a current pixel location */
+static pixel_vector_t vpos_to_pixel(vector2_t vpos) {
+    return (pixel_vector_t){round(vpos.x / zoom) + offset.x, round(vpos.y / zoom) + offset.y};
+}
+
+/* free linked list nodes */
 static void unload(void) {
     vector2_node_t *cursor = head;
     while (cursor) {
@@ -214,7 +242,7 @@ static void unload(void) {
 
 }
 
-/* activate window stuff. Very similar to java constructor when using the java window stuff. */
+/* activate window & set up widgets, connections, etc */
 static void activate(GtkApplication *app, gpointer user_data) {
     //simple elements: a window, a frame, and the drawing area for the strokes.
     GtkWidget *window;
@@ -243,7 +271,7 @@ static void activate(GtkApplication *app, gpointer user_data) {
     //set it so we can focus it
     gtk_widget_set_can_focus(drawing_area, TRUE);
     //set minimum size
-    gtk_widget_set_size_request(drawing_area, 100, 100);
+    gtk_widget_set_size_request(drawing_area, 200, 200);
     //add draw area to the frame
     gtk_container_add(GTK_CONTAINER(frame), drawing_area);
 
@@ -256,9 +284,11 @@ static void activate(GtkApplication *app, gpointer user_data) {
     g_signal_connect(drawing_area, "motion-notify-event", G_CALLBACK(dw_moved), NULL);
     g_signal_connect(drawing_area, "button-press-event", G_CALLBACK(dw_clicked), NULL);
     g_signal_connect(drawing_area, "key-press-event", G_CALLBACK(dw_keyPressed), NULL);
+    g_signal_connect(drawing_area, "scroll-event", G_CALLBACK(dw_mousewheel), NULL);
+
 
     //set events
-    gtk_widget_set_events(drawing_area, gtk_widget_get_events(drawing_area) | GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK);
+    gtk_widget_set_events(drawing_area, gtk_widget_get_events(drawing_area) | GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
 
     //show widgets; otherwise nothing will happen
     gtk_widget_show_all(window);
