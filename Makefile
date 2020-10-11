@@ -1,8 +1,9 @@
 CC=clang
-CFILE=src/gtkdraw.c
-OUTFILE=gtkdraw
+CFILE=src/infinite_draw.c
+HFILE=src/infinite_draw.h
+OUTFILE=infinite_draw
 
-gtkdraw: src/gtkdraw.c src/gtkdraw.h
+gtkdraw: $(CFILE) $(HFILE)
 	$(CC) `pkg-config --cflags gtk+-3.0` -o $(OUTFILE) $(CFILE) `pkg-config --libs gtk+-3.0` -lm
 
 clean:

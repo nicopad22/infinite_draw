@@ -175,10 +175,6 @@ gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
         else if (last->state == end) {
             last->state = path;
             NewNode->state = end;
-        } else  {
-            //something has gone horribly wrong when setting the states up, quickly exit and report the user
-            fprintf(stderr, "ERROR: linked list not set up correctly, node had invalid state: %d\n", last->state);
-            return FALSE;
         }
 
         last = NewNode;
