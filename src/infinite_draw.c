@@ -90,28 +90,27 @@ void paint_window(cairo_t *cr) {
     while (cursor) {
         pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
         switch(cursor->state) {
-            case start_and_end: break;
+            case start_and_end:
+                break;
 
             case start:
-                last_brush_size = cursor->brush_size / zoom;
                 cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
-                cairo_set_line_width(cr, last_brush_size);
+                cairo_set_line_width(cr, cursor->brush_size / zoom);
                 cairo_move_to(cr, screenPos.x, screenPos.y);
                 break;
 
             case path:
                 cairo_line_to(cr, screenPos.x, screenPos.y);
-                cairo_move_to(cr, screenPos.x, screenPos.y);
                 break;
 
             case end:
                 cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_stroke(cr);
                 break;
-                
         }
         cursor = cursor->next;
     }
-    cairo_stroke(cr);
+    
 }
 
 /* called when mouse is clicked; does not get called each frame, but rather once when you press the mouse. */
@@ -174,13 +173,15 @@ gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
         //and append a new node at the end.
         else if (last->state == end) {
             last->state = path;
-            NewNode->state = end;
         }
 
-        last = NewNode;
+        //we are now the new end of the list
         NewNode->state = end;
+
+        last = NewNode;
     }
 
+    //redraw the screen
     gtk_widget_queue_draw(widget);
 
     vector2_t movement = {0, 0};
