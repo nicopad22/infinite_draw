@@ -207,10 +207,8 @@ gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) 
                          ((event->direction == GDK_SCROLL_DOWN) * zoom_increase * zoom);
     zoom += to_increase;
 
-    double x_offset_change = (to_increase * window_size.x) * (event->x / window_size.x) * -1;
-    g_print("changed x offset by: %f\n", x_offset_change);
-    double y_offset_change = (to_increase * window_size.y) * (event->y / window_size.y) * -1;
-    g_print("changed y offset by: %f\n", y_offset_change);
+    double x_offset_change = (to_increase * window_size.x) * -(event->x / window_size.x);
+    double y_offset_change = (to_increase * window_size.y) * -(event->y / window_size.y);
 
     offset.x += x_offset_change / zoom;
     offset.y += y_offset_change / zoom;
@@ -239,7 +237,6 @@ vector2_t pixel_to_vpos(pixel_vector_t pixel) {
     return (vector2_t){(pixel.x + offset.x) * zoom, (pixel.y + offset.y) * zoom};
 }
 
-//drawing at incorrect place issue seems to be here
 /* convert a virtual location to a current pixel location */
 pixel_vector_t vpos_to_pixel(vector2_t vpos) {
     return (pixel_vector_t){round(vpos.x / zoom - offset.x), round(vpos.y / zoom - offset.y)};
@@ -261,7 +258,6 @@ void unload(void) {
         free(temp);
     }
     head = last = NULL;
-
 }
 
 /* activate window & set up widgets, connections, etc */
