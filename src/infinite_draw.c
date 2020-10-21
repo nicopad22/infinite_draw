@@ -8,7 +8,7 @@ static cairo_surface_t *surface = NULL;
 //to control if the user is dragging across.
 static gboolean is_dragging = FALSE;
 //last position; used to control how much the screen is moved.
-static vector2_t last_pos;
+static pixel_vector_t last_pos;
 //offset for being able to move things around
 static vector2_t offset;
 //zoom level
@@ -122,7 +122,7 @@ gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data) {
     if (event->button == GDK_BUTTON_PRIMARY) {
         vector2_node_t *StartNode = malloc(sizeof(vector2_node_t));
         //set positions and initialize .next
-        StartNode->vector = pixel_to_vpos((pixel_vector_t){event->x, event->y});
+        StartNode->vector = pixel_to_vpos((pixel_vector_t){round(event->x), round(event->y)});
         StartNode->color = brush_color;
         StartNode->brush_size = brush_size * zoom;
         StartNode->next = NULL;
@@ -138,13 +138,13 @@ gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data) {
             last->next = StartNode;
             last = StartNode;
             StartNode->state = start_and_end;
-        }   
+        }
     }
-        
+
     gtk_widget_queue_draw(widget);
 
-    last_pos.x = event->x;
-    last_pos.y = event->y;
+    last_pos.x = round(event->x);
+    last_pos.y = round(event->y);
 
     //everything has gone well. (hopefully)
     return TRUE;
@@ -159,7 +159,7 @@ gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
     if (event->state & GDK_BUTTON1_MASK) {
         vector2_node_t *NewNode = malloc(sizeof(vector2_node_t));
 
-        NewNode->vector = pixel_to_vpos((pixel_vector_t){event->x, event->y});
+        NewNode->vector = pixel_to_vpos((pixel_vector_t){round(event->x), round(event->y)});
         NewNode->next = NULL;
 
         //whatever happens, we definetly want the last node to point at us.
@@ -185,16 +185,16 @@ gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
     gtk_widget_queue_draw(widget);
 
     vector2_t movement = {0, 0};
-    movement.x = event->x - last_pos.x;
-    movement.y = event->y - last_pos.y;
-    last_pos.x = event->x;
-    last_pos.y = event->y;
+    movement.x = round(event->x) - last_pos.x;
+    movement.y = round(event->y) - last_pos.y;
+    last_pos.x = round(event->x);
+    last_pos.y = round(event->y);
 
     //movement = pixel_to_vpos((pixel_vector_t){movement.x, movement.y});
 
     if (is_dragging) {
-        offset.x += movement.x * zoom;
-        offset.y += movement.y * zoom;
+        offset.x -= movement.x;
+        offset.y -= movement.y;
     }
 
     //everything went well
@@ -207,13 +207,13 @@ gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) 
                          ((event->direction == GDK_SCROLL_DOWN) * zoom_increase * zoom);
     zoom += to_increase;
 
-    double x_offset_change = (to_increase * window_size.x) * (1 / (event->x / 4));
-    //g_print("changed x offset by: %f\n", x_offset_change);
-    double y_offset_change = (to_increase * window_size.y) * (1 / (event->y / 4));
-    //g_print("changed y offset by: %f\n", y_offset_change);
+    double x_offset_change = (to_increase * window_size.x) * (event->x / window_size.x) * -1;
+    g_print("changed x offset by: %f\n", x_offset_change);
+    double y_offset_change = (to_increase * window_size.y) * (event->y / window_size.y) * -1;
+    g_print("changed y offset by: %f\n", y_offset_change);
 
-    //offset.x += x_offset_change;
-    //offset.y += y_offset_change;
+    offset.x += x_offset_change / zoom;
+    offset.y += y_offset_change / zoom;
     gtk_widget_queue_draw(widget);
 
     return TRUE;
@@ -236,12 +236,13 @@ gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data) {
 
 /* convert a current pixel location to a virtual position. */
 vector2_t pixel_to_vpos(pixel_vector_t pixel) {
-    return (vector2_t){(pixel.x - offset.x * zoom) * zoom, (pixel.y - offset.y * zoom) * zoom};
+    return (vector2_t){(pixel.x + offset.x) * zoom, (pixel.y + offset.y) * zoom};
 }
 
+//drawing at incorrect place issue seems to be here
 /* convert a virtual location to a current pixel location */
 pixel_vector_t vpos_to_pixel(vector2_t vpos) {
-    return (pixel_vector_t){round(vpos.x / zoom) + offset.x / zoom, round(vpos.y / zoom) + offset.y / zoom};
+    return (pixel_vector_t){round(vpos.x / zoom - offset.x), round(vpos.y / zoom - offset.y)};
 }
 
 /* make sure to destroy cairo surface when we close the window */
