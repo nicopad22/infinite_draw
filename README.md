@@ -8,8 +8,8 @@ Yes, I know milton exists, but this was my attemt at making a similar thing, wit
 
 - [x] Create basic code structure (vectors, lines, basic utility functions)
 - [x] Get basic drawing window set up
-- [ ] Zoom towards mouse
-- [ ] Color drawing
+- [x] Zoom towards mouse
+- [ ] Color drawing (+ selecting size)
 - [ ] Save as gtkdraw project (.gdw)
 - [ ] Save as image feature (.bmp first, maybe .jpg or .png later)
 - [ ] Bookmarks

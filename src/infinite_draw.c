@@ -1,7 +1,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include "infinite_draw.h"
-#define zoom_increase 0.09
+#define zoom_increase 0.06
 
 //surface for drawing.
 static cairo_surface_t *surface = NULL;
@@ -16,7 +16,7 @@ static double zoom = 1;
 //size of the window
 static pixel_vector_t window_size;
 //brush size
-static float brush_size = 2;
+static double brush_size = 2;
 //brush color
 static pixel_t brush_color;
 
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     GtkApplication *app;
     int status;
 
-    app = gtk_application_new("org.gtk.example", G_APPLICATION_FLAGS_NONE);
+    app = gtk_application_new("nicopad22.infinite_draw", G_APPLICATION_FLAGS_NONE);
     g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
     status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
@@ -111,6 +111,12 @@ void paint_window(cairo_t *cr) {
         cursor = cursor->next;
     }
     
+}
+
+/* save newly selected brush width */
+void size_slider_moved(GtkRange *range, gpointer user_data) {
+    double pos = gtk_range_get_value(range);
+    brush_size = pos;
 }
 
 /* called when mouse is clicked; does not get called each frame, but rather once when you press the mouse. */
@@ -207,8 +213,8 @@ gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) 
                          ((event->direction == GDK_SCROLL_DOWN) * zoom_increase * zoom);
     zoom += to_increase;
 
-    double x_offset_change = (to_increase * window_size.x) * -(event->x / window_size.x);
-    double y_offset_change = (to_increase * window_size.y) * -(event->y / window_size.y);
+    double x_offset_change = (to_increase * (float)window_size.x) * -(event->x / (float)window_size.x);
+    double y_offset_change = (to_increase * (float)window_size.y) * -(event->y / (float)window_size.y);
 
     offset.x += x_offset_change / zoom;
     offset.y += y_offset_change / zoom;
@@ -265,7 +271,11 @@ void activate(GtkApplication *app, gpointer user_data) {
     //simple elements: a window, a frame, and the drawing area for the strokes.
     GtkWidget *window;
     GtkWidget *frame;
+    GtkWidget *main_grid;
+    GtkWidget *selection_grid;
     GtkWidget *drawing_area;
+    GtkWidget *color_picker;
+    GtkWidget *size_slider;
 
     //create new window, and set its title.
     window = gtk_application_window_new(app);
@@ -277,13 +287,37 @@ void activate(GtkApplication *app, gpointer user_data) {
     //set border width for the window. (to leave some space between draw area and window)
     gtk_container_set_border_width(GTK_CONTAINER(window), 8);
 
+    GtkAdjustment *hadjustment;
+
+    hadjustment = gtk_adjustment_new(10, 1, 100, 5, 10, 0);
+
     //create new frame, no label. (NULL)
     frame = gtk_frame_new(NULL);
     //set the shadow for the frame
     gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
-    //add frame to window.
-    gtk_container_add(GTK_CONTAINER(window), frame);
     
+    //create the size slider
+    size_slider = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, hadjustment);
+
+    //set digit display to 3 decimals
+    gtk_scale_set_digits(GTK_SCALE(size_slider), 1);
+
+    gtk_widget_set_size_request(size_slider, 70, 50);
+
+    //create a new color picker
+    //color_picker = gtk_color_chooser_dialog_new("Color", GTK_WINDOW(window));
+
+    //we dont want transparency (yet)
+    //gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_picker), FALSE);
+
+    //set initial color selection
+    //gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_picker), &(GdkRGBA){0.2, 0, 0.6, 0});
+
+    selection_grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(selection_grid), 10);
+    gtk_grid_attach(GTK_GRID(selection_grid), size_slider, 0, 0, 1, 1);
+    //gtk_grid_attach(GTK_GRID(selection_grid), color_picker, 0, 1, 1, 1);
+
     //create new draw area
     drawing_area = gtk_drawing_area_new();
     //set it so we can focus it
@@ -293,12 +327,25 @@ void activate(GtkApplication *app, gpointer user_data) {
     //add draw area to the frame
     gtk_container_add(GTK_CONTAINER(frame), drawing_area);
 
+    //set it to expand if space is available
+    gtk_widget_set_hexpand(drawing_area, TRUE);
+    gtk_widget_set_vexpand(drawing_area, TRUE);
+
+    main_grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(main_grid), 10);
+    gtk_grid_attach(GTK_GRID(main_grid), selection_grid, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(main_grid), frame, 1, 0, 1, 1);
+
+    gtk_container_add(GTK_CONTAINER(window), main_grid);
+
     //Connect signal to draw the surface to the screen
     g_signal_connect(drawing_area, "draw", G_CALLBACK(draw_cb), NULL);
     //Connect signal to create a new surface with the appropriate size
     g_signal_connect(drawing_area, "configure-event", G_CALLBACK(configure_event_cb), NULL);
     //Connect signal to update local readings of window size.
     g_signal_connect(drawing_area, "size_allocate", G_CALLBACK(get_window_size_on_change), NULL);
+    //connect signal to update stroke width when we change it through the slider
+    g_signal_connect(size_slider, "value-changed", G_CALLBACK(size_slider_moved), NULL);
 
     //connect signals for mouse & keyboard events
     g_signal_connect(drawing_area, "motion-notify-event", G_CALLBACK(dw_moved), NULL);

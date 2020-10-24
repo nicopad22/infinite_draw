@@ -46,9 +46,11 @@ vector2_node_t *last;
 
 void clear_screen(void);
 gboolean configure_event_cb(GtkWidget *widget, GdkEventConfigure *event, gpointer data);
+void get_window_size_on_change(GtkWidget *widget, GtkAllocation *allocation, void *data);
 gboolean draw_cb(GtkWidget *widget, cairo_t *cr, gpointer data);
 void paint_window(cairo_t *cr);
 
+void size_slider_moved(GtkRange *range, gpointer user_data);
 gboolean dw_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data);
 gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data);
 gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data);
