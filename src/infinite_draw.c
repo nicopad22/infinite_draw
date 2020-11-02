@@ -19,6 +19,10 @@ static pixel_vector_t window_size;
 static double brush_size = 2;
 //brush color
 static pixel_t brush_color;
+//zoom upper limit
+static double zoom_upper_limit;
+//zoom lower limit
+static double zoom_lower_limit = 0.13;
 
 
 
@@ -85,15 +89,17 @@ void paint_window(cairo_t *cr) {
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_paint(cr);
 
-    float last_brush_size;
+    vector2_node_t *last_start;
 
     while (cursor) {
         pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
-        switch(cursor->state) {
+        switch (cursor->state) {
             case start_and_end:
                 break;
 
             case start:
+                last_start = cursor;
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
                 cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
                 cairo_set_line_width(cr, cursor->brush_size / zoom);
                 cairo_move_to(cr, screenPos.x, screenPos.y);
@@ -101,16 +107,65 @@ void paint_window(cairo_t *cr) {
 
             case path:
                 cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
                 break;
 
             case end:
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_stroke(cr);
+                cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+                // cairo_set_source_rgb(cr, last_start->color.red, last_start->color.green, last_start->color.blue);
+                // cairo_set_line_width(cr, last_start->brush_size / zoom);
+                
+                // while (last_start) {
+                //     if (last_start->state == start || last_start->state == start_and_end) {
+                        
+                //     }
+                    
+                    
+
+                //     last_start = last_start->next;
+                // }
+
+                break;
+        }
+        cursor = cursor->next;
+    }
+
+    cursor = head;
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+    while (cursor) {
+        pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
+        switch(cursor->state) {
+            case start_and_end:
+                cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
+                cairo_set_line_width(cr, cursor->brush_size / zoom);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_stroke(cr);
+                break;
+            case start:
+                cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
+                cairo_set_line_width(cr, cursor->brush_size / zoom);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                break;
+
+            case path:
+                cairo_move_to(cr, screenPos.x, screenPos.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                break;
+
+            case end:
+                cairo_move_to(cr, screenPos.x, screenPos.y);
                 cairo_line_to(cr, screenPos.x, screenPos.y);
                 cairo_stroke(cr);
                 break;
         }
         cursor = cursor->next;
     }
-    
 }
 
 /* save newly selected brush width */
@@ -209,16 +264,20 @@ gboolean dw_moved(GtkWidget *widget, GdkEventMotion *event, gpointer data) {
 
 /* activates when the mouse wheel gets scrolled up. */
 gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) {
-    double to_increase = ((event->direction == GDK_SCROLL_UP) * -zoom_increase * zoom) +
-                         ((event->direction == GDK_SCROLL_DOWN) * zoom_increase * zoom);
-    zoom += to_increase;
+    double to_increase = ((event->direction == GDK_SCROLL_UP) * -zoom_increase) +
+                         ((event->direction == GDK_SCROLL_DOWN) * zoom_increase);
+    if (!(zoom + (to_increase * zoom) < zoom_lower_limit)) {
+        zoom += to_increase * zoom;
+        
 
-    double x_offset_change = (to_increase * (float)window_size.x) * -(event->x / (float)window_size.x);
-    double y_offset_change = (to_increase * (float)window_size.y) * -(event->y / (float)window_size.y);
+        double x_offset_change = (to_increase * (double)window_size.x) * -(event->x / (double)window_size.x);
+        double y_offset_change = (to_increase * (double)window_size.y) * -(event->y / (double)window_size.y);
 
-    offset.x += x_offset_change / zoom;
-    offset.y += y_offset_change / zoom;
-    gtk_widget_queue_draw(widget);
+        offset.x += x_offset_change / zoom;
+        offset.y += y_offset_change / zoom;
+        gtk_widget_queue_draw(widget);
+    }
+    g_print("zoom: %f\n", zoom);
 
     return TRUE;
 }
@@ -229,13 +288,22 @@ gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data) {
     if (surface == NULL)
         return FALSE;
 
-    //we want to be dragging while we hold space; and as this triggers when we press and release,
-    //this boolean will be true when we are holding it.
     if (event->keyval == GDK_KEY_space) {
         is_dragging = !is_dragging;
     }
 
     return TRUE;
+}
+
+void cp_color_changed(GtkColorButton *button, gpointer data) {
+
+    GdkRGBA newColor;
+
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &newColor);
+
+    brush_color.red = newColor.red;
+    brush_color.green = newColor.green;
+    brush_color.blue = newColor.blue;
 }
 
 /* convert a current pixel location to a virtual position. */
@@ -270,12 +338,14 @@ void unload(void) {
 void activate(GtkApplication *app, gpointer user_data) {
     //simple elements: a window, a frame, and the drawing area for the strokes.
     GtkWidget *window;
-    GtkWidget *frame;
     GtkWidget *main_grid;
     GtkWidget *selection_grid;
+    GtkWidget *dw_frame;
     GtkWidget *drawing_area;
-    GtkWidget *color_picker;
+    GtkWidget *slider_label;
     GtkWidget *size_slider;
+    GtkWidget *cp_label;
+    GtkWidget *color_picker;
 
     //create new window, and set its title.
     window = gtk_application_window_new(app);
@@ -291,41 +361,47 @@ void activate(GtkApplication *app, gpointer user_data) {
 
     hadjustment = gtk_adjustment_new(10, 1, 100, 5, 10, 0);
 
-    //create new frame, no label. (NULL)
-    frame = gtk_frame_new(NULL);
-    //set the shadow for the frame
-    gtk_frame_set_shadow_type(GTK_FRAME(frame), GTK_SHADOW_IN);
-    
+    //create new label for the size slider
+    slider_label = gtk_label_new("Line width: ");
+
     //create the size slider
     size_slider = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, hadjustment);
 
-    //set digit display to 3 decimals
+    //set digit display to 1 decimal 
     gtk_scale_set_digits(GTK_SCALE(size_slider), 1);
 
-    gtk_widget_set_size_request(size_slider, 70, 50);
+    gtk_widget_set_can_focus(size_slider, FALSE);
 
-    //create a new color picker
-    //color_picker = gtk_color_chooser_dialog_new("Color", GTK_WINDOW(window));
+    gtk_widget_set_size_request(size_slider, 100, 50);
 
-    //we dont want transparency (yet)
-    //gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_picker), FALSE);
+    //create new label for color picker
+    cp_label = gtk_label_new("Color:");
 
-    //set initial color selection
-    //gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_picker), &(GdkRGBA){0.2, 0, 0.6, 0});
+    //create new color picker
+    color_picker = gtk_color_button_new_with_rgba(&(GdkRGBA){0, 0, 0, 1});
+    gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_picker), FALSE);
+    gtk_color_button_set_title(GTK_COLOR_BUTTON(color_picker), "Color selection");
 
     selection_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(selection_grid), 10);
-    gtk_grid_attach(GTK_GRID(selection_grid), size_slider, 0, 0, 1, 1);
-    //gtk_grid_attach(GTK_GRID(selection_grid), color_picker, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(selection_grid), slider_label, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(selection_grid), size_slider, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(selection_grid), cp_label, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(selection_grid), color_picker, 0, 3, 1, 1);
 
+    //create new frame, no label. (NULL)
+    dw_frame = gtk_frame_new(NULL);
+    //set the shadow for the frame
+    gtk_frame_set_shadow_type(GTK_FRAME(dw_frame), GTK_SHADOW_IN);
+    
     //create new draw area
     drawing_area = gtk_drawing_area_new();
     //set it so we can focus it
     gtk_widget_set_can_focus(drawing_area, TRUE);
     //set minimum size
-    gtk_widget_set_size_request(drawing_area, 200, 200);
+    gtk_widget_set_size_request(drawing_area, 600, 600);
     //add draw area to the frame
-    gtk_container_add(GTK_CONTAINER(frame), drawing_area);
+    gtk_container_add(GTK_CONTAINER(dw_frame), drawing_area);
 
     //set it to expand if space is available
     gtk_widget_set_hexpand(drawing_area, TRUE);
@@ -334,7 +410,7 @@ void activate(GtkApplication *app, gpointer user_data) {
     main_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(main_grid), 10);
     gtk_grid_attach(GTK_GRID(main_grid), selection_grid, 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(main_grid), frame, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(main_grid), dw_frame, 1, 0, 1, 1);
 
     gtk_container_add(GTK_CONTAINER(window), main_grid);
 
@@ -352,6 +428,7 @@ void activate(GtkApplication *app, gpointer user_data) {
     g_signal_connect(drawing_area, "button-press-event", G_CALLBACK(dw_clicked), NULL);
     g_signal_connect(drawing_area, "key-press-event", G_CALLBACK(dw_keyPressed), NULL);
     g_signal_connect(drawing_area, "scroll-event", G_CALLBACK(dw_mousewheel), NULL);
+    g_signal_connect(color_picker, "color-set", G_CALLBACK(cp_color_changed), NULL);
 
 
     //set events
