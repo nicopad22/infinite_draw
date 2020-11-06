@@ -1,4 +1,4 @@
-# Welcome to gtkdraw
+# Welcome to infinite draw (by nicopad22)
 
 This is an infinite canvas app written in `c` using gtk for illustrating ideas and planning projects, it allows you to draw in an infinite canvas where you can zoom in and zoom out a lot, and not lose any quality in the process, as this is *not* a pixel-based app like paint.
 
@@ -10,6 +10,6 @@ Yes, I know milton exists, but this was my attemt at making a similar thing, wit
 - [x] Get basic drawing window set up
 - [x] Zoom towards mouse
 - [x] Color drawing (+ selecting size)
-- [ ] Save as gtkdraw project (.gdw)
+- [ ] Save as infinite draw project (.ind)
 - [ ] Save as image feature (.bmp first, maybe .jpg or .png later)
 - [ ] Bookmarks
