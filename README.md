@@ -4,7 +4,7 @@ This is an infinite canvas app written in `c` using gtk for illustrating ideas a
 
 Yes, I know milton exists, but this was my attemt at making a similar thing, with my own way of making it, and my own features, etc. (plus, it should work on every OS that gtk3 supports, hasnt been tested though)
 
-Feedback is really appreciated, you can contact me through discord (Кинтана#3752).
+Feedback is really appreciated, you can contact me through discord (Кинтана#3752) or open an issue in github if you encounter a bug (if its related to zooming towards the mouse, no I dont know how to fix that yet and I spent a month on it so please dont report that one).
 
 ## How to compile and run
 
