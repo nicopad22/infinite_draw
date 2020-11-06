@@ -95,6 +95,11 @@ void paint_window(cairo_t *cr) {
         pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
         switch (cursor->state) {
             case start_and_end:
+                cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
+                cairo_set_line_width(cr, cursor->brush_size / zoom);
+                cairo_move_to(cr, screenPos.x, screenPos.y);
+                cairo_line_to(cr, screenPos.x, screenPos.y);
+                cairo_stroke(cr);
                 break;
 
             case start:
@@ -115,53 +120,26 @@ void paint_window(cairo_t *cr) {
                 cairo_stroke(cr);
                 cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-                // cairo_set_source_rgb(cr, last_start->color.red, last_start->color.green, last_start->color.blue);
-                // cairo_set_line_width(cr, last_start->brush_size / zoom);
-                
-                // while (last_start) {
-                //     if (last_start->state == start || last_start->state == start_and_end) {
-                        
-                //     }
+                cairo_set_source_rgb(cr, last_start->color.red, last_start->color.green, last_start->color.blue);
+                cairo_set_line_width(cr, last_start->brush_size / zoom);
+
+                vector2_node_t *last_start_tmp = last_start;
+
+                while (last_start_tmp) {
+                    if ((last_start_tmp->state == start && last_start_tmp != last_start) || last_start_tmp->state == start_and_end) {
+                        break;
+                    }
+
+                    screenPos = vpos_to_pixel(last_start_tmp->vector);
+
+                    cairo_move_to(cr, screenPos.x, screenPos.y);
+                    cairo_line_to(cr, screenPos.x, screenPos.y);
+                    cairo_stroke(cr);
                     
-                    
 
-                //     last_start = last_start->next;
-                // }
+                    last_start_tmp = last_start_tmp->next;
+                }
 
-                break;
-        }
-        cursor = cursor->next;
-    }
-
-    cursor = head;
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-
-    while (cursor) {
-        pixel_vector_t screenPos = vpos_to_pixel(cursor->vector);
-        switch(cursor->state) {
-            case start_and_end:
-                cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
-                cairo_set_line_width(cr, cursor->brush_size / zoom);
-                cairo_move_to(cr, screenPos.x, screenPos.y);
-                cairo_line_to(cr, screenPos.x, screenPos.y);
-                cairo_stroke(cr);
-                break;
-            case start:
-                cairo_set_source_rgb(cr, cursor->color.red, cursor->color.green, cursor->color.blue);
-                cairo_set_line_width(cr, cursor->brush_size / zoom);
-                cairo_move_to(cr, screenPos.x, screenPos.y);
-                cairo_line_to(cr, screenPos.x, screenPos.y);
-                break;
-
-            case path:
-                cairo_move_to(cr, screenPos.x, screenPos.y);
-                cairo_line_to(cr, screenPos.x, screenPos.y);
-                break;
-
-            case end:
-                cairo_move_to(cr, screenPos.x, screenPos.y);
-                cairo_line_to(cr, screenPos.x, screenPos.y);
-                cairo_stroke(cr);
                 break;
         }
         cursor = cursor->next;
@@ -277,7 +255,6 @@ gboolean dw_mousewheel(GtkWidget *widget, GdkEventScroll *event, gpointer data) 
         offset.y += y_offset_change / zoom;
         gtk_widget_queue_draw(widget);
     }
-    g_print("zoom: %f\n", zoom);
 
     return TRUE;
 }
@@ -295,6 +272,7 @@ gboolean dw_keyPressed(GtkWidget *widget, GdkEventKey *event, gpointer data) {
     return TRUE;
 }
 
+/* change our brush color when new color is selected */
 void cp_color_changed(GtkColorButton *button, gpointer data) {
 
     GdkRGBA newColor;
@@ -360,6 +338,7 @@ void activate(GtkApplication *app, gpointer user_data) {
     GtkAdjustment *hadjustment;
 
     hadjustment = gtk_adjustment_new(10, 1, 100, 5, 10, 0);
+    brush_size = 10;
 
     //create new label for the size slider
     slider_label = gtk_label_new("Line width: ");
@@ -381,6 +360,8 @@ void activate(GtkApplication *app, gpointer user_data) {
     color_picker = gtk_color_button_new_with_rgba(&(GdkRGBA){0, 0, 0, 1});
     gtk_color_chooser_set_use_alpha(GTK_COLOR_CHOOSER(color_picker), FALSE);
     gtk_color_button_set_title(GTK_COLOR_BUTTON(color_picker), "Color selection");
+
+    gtk_widget_set_can_focus(color_picker, FALSE);
 
     selection_grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(selection_grid), 10);
@@ -433,6 +414,8 @@ void activate(GtkApplication *app, gpointer user_data) {
 
     //set events
     gtk_widget_set_events(drawing_area, gtk_widget_get_events(drawing_area) | GDK_BUTTON_PRESS_MASK | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
+
+    gtk_widget_grab_focus(drawing_area);
 
     //show widgets; otherwise nothing will happen
     gtk_widget_show_all(window);
